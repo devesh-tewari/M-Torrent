@@ -15,7 +15,7 @@
 
 using namespace std;
 
-#define port 8001
+#define port 8002
 #define bufSize 1024
 #define Tracker1 "10.1.37.71"
 
@@ -73,7 +73,10 @@ string processCommand( string s )
 
       filename = get_file_name_from_path(tokens[1]);
 
+      SHA = SHAofSHAstr( SHA );   //SHA1 of SHA1 string
+
 	}
+
   return commandName+" "+filename+" "+SHA;
 
 
@@ -90,7 +93,7 @@ int main()
     cout<<"Enter command: ";
     getline (cin, command);
     command=processCommand(command);
-    cout<<command<<endl;
+    //cout<<command<<endl;
              //
 
 

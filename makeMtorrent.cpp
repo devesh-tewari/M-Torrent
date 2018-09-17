@@ -54,7 +54,7 @@ string get_hash( char* path )
       SHA1( (unsigned char*)buffer, readLen, hash);
 
       char hashstr[41];
-      for(int i = 0; i<20; ++i)
+      for(i = 0; i<20; ++i)
         sprintf(&hashstr[i*2], "%02X", hash[i]);
 
       hashstr[20]='\0';
@@ -73,6 +73,24 @@ string get_hash( char* path )
 	}
   return fileHash;
 
+}
+
+string SHAofSHAstr( string sha )
+{
+  int i;
+  int size = strlen(&sha[0]);
+
+  unsigned char hash[SHA_DIGEST_LENGTH];
+
+  SHA1( (unsigned char*)&sha[0], size, hash);
+
+  char hashstr[41];
+  for(i = 0; i<20; ++i)
+    sprintf(&hashstr[i*2], "%02X", hash[i]);
+  hashstr[20]='\0';
+  string SHA(hashstr);
+
+  return SHA;
 }
 
 /*int main()
