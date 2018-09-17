@@ -12,12 +12,19 @@
 #include <fstream>
 
 #include "makeMtorrent.h"
+#include "download.h"
 
 using namespace std;
 
-#define port 8002
+#define Tracker1port 8002
+#define Tracker1IP "10.1.37.71"
+
+#define listenPort 8020
+
 #define bufSize 1024
-#define Tracker1 "10.1.37.71"
+
+bool getCommand;
+bool shareCommand;
 
 string get_file_name_from_path(char* path)  //this function returns the last folder from an input path
 {
@@ -33,13 +40,14 @@ string get_file_name_from_path(char* path)  //this function returns the last fol
     return name;
 }
 
+string SHA;
 string processCommand( string s )
 {
   char* command = &s[0];
   //cout<<command;
   string commandName;
   string filename;
-  string SHA;
+
   char* token;
   token = strtok (command," ");
   vector<char*> tokens;
@@ -55,6 +63,7 @@ string processCommand( string s )
 
   if( strcmp(tokens[0],"share") == 0 )
 	{
+      shareCommand = true;
       //for(int i=0;i<size;i++)
         //cout<<tokens[i]<<endl;
       commandName = "share";
@@ -74,10 +83,30 @@ string processCommand( string s )
       filename = get_file_name_from_path(tokens[1]);
 
       SHA = SHAofSHAstr( SHA );   //SHA1 of SHA1 string
+cout<<to_string(listenPort);
+      return commandName + " " + filename + " " + SHA + " " + to_string(listenPort);
 
 	}
 
-  return commandName+" "+filename+" "+SHA;
+  else if( strcmp(tokens[0],"get") == 0 )
+	{
+    getCommand = true;
+    commandName = "seederlist";
+
+    ifstream Mtor ( tokens[1] );
+
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );  //this is the SHA concatenated string
+    Mtor.close();
+
+    SHA = SHAofSHAstr( SHA );  //SHA of SHA concatenated string
+
+    return commandName + " " + SHA;
+
+  }
 
 
 }
@@ -88,11 +117,13 @@ int main()
     char buffer[bufSize];
     //char hello[] = "Hello from client";
 
-
+                              /*make seederlist command*/
+    getCommand = false;
+    shareCommand = false;
     string command;           //
     cout<<"Enter command: ";
     getline (cin, command);
-    command=processCommand(command);
+    command = processCommand(command);
     //cout<<command<<endl;
              //
 
@@ -108,8 +139,8 @@ int main()
     memset(&servAdd, 0, sizeof(servAdd));
 
     servAdd.sin_family = AF_INET;
-    servAdd.sin_port = htons(port);
-    servAdd.sin_addr.s_addr = inet_addr(Tracker1);
+    servAdd.sin_port = htons(Tracker1port);
+    servAdd.sin_addr.s_addr = inet_addr(Tracker1IP);
 
     int n;
     unsigned int len;
@@ -121,6 +152,17 @@ int main()
     buffer[n] = '\0';
     printf("Server : %s\n", buffer);
 
+    if ( getCommand )
+    {
+      download( buffer, &SHA[0] );
+    }
+
+    if( shareCommand )
+    {
+      int pid = fork();
+      if(pid==0)
+        seed( SHA );
+    }
     close(sockfd);
     return 0;
 }

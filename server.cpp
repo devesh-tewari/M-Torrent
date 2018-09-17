@@ -14,12 +14,15 @@
 #include <fstream>
 
 #define port 8002
+#define otherTrackerIP 0
+#define otherTrackerPort 0
 #define bufSize 1024
 
 using namespace std;
 
-map < string, set<string> > seedersHash;  // stores the mapping of hash to clients
+map < string, set<string> > seedersHash;  // stores the mapping of SHA hash to seeding clients
 
+string REPLY;
 char* processRequest(char* buf, char* addr)
 {
   char buffer[bufSize];
@@ -43,6 +46,9 @@ char logfile[] = "logfile.txt";
       set<string> s;
       string SHA(tokens[2]);
       string client(addr);
+      string cliListenPort(tokens[3]);
+      client = client + ":" + cliListenPort;
+
       if( seedersHash.find(SHA) == seedersHash.end() ) //SHA string not already present
       {
         s.insert(client);
@@ -92,7 +98,26 @@ char logfile[] = "logfile.txt";
             log1.close();
           }
         }
+        REPLY = "Shared";
+        buf = &REPLY[0];
+        return buf;
+      }
 
+      else if( strcmp(tokens[0],"seederlist") == 0 )  //receive hash
+    	{
+          string SHA(tokens[1]);
+          REPLY="";
+          if( seedersHash.find(SHA) == seedersHash.end() ) //SHA string not present
+          {
+            REPLY = "NOseeders";
+          }
+          else
+          {
+            for( auto i = seedersHash[SHA].begin(); i != seedersHash[SHA].end() ; i++ )
+              REPLY = *i + " " + REPLY;
+          }
+          buf = &REPLY[0];
+          return buf;
       }
     }
   return buf;
@@ -132,7 +157,7 @@ int main()
 
     int sockfd;
     char buffer[bufSize];
-    char* reply;
+
     struct sockaddr_in servAdd, cliAdd;
 
     if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
@@ -162,15 +187,17 @@ int main()
       buffer[n] = '\0';
 
       string CliIP( inet_ntoa(cliAdd.sin_addr) );
-      int CliPort = ntohs(cliAdd.sin_port);  //give the tracker port that the client will listen on
-      string clientSocket = CliIP + ":" + to_string(CliPort);
-      cout<<"Client Address: "<<clientSocket<<endl;
-
-      reply = processRequest( buffer, &clientSocket[0] );
-      //cout<<buffer<<endl;
+      //int CliPort = ntohs(cliAdd.sin_port);  //give the tracker port that the client will listen on
+      //string clientSocket = CliIP + ":" + to_string(CliPort);
+      cout<<"Client Address: "<<CliIP<<endl;
       printf("Client : %s\n", buffer);
-      cout<<endl<<reply;
-      sendto(sockfd, (const char *)reply, strlen(reply), MSG_CONFIRM, (const struct sockaddr *) &cliAdd, len);
+
+      char reply[1024];
+      strcpy( reply , processRequest( buffer, &CliIP[0] ) );
+      //cout<<buffer<<endl;
+
+      cout<<strlen(reply)<<endl;
+      sendto(sockfd, (char *)reply, bufSize, MSG_CONFIRM, (const struct sockaddr *) &cliAdd, len);
       printf("Reply sent.\n");
     }
 
