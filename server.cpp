@@ -56,8 +56,7 @@ char logfile[] = "logfile.txt";
         ofstream log ( logfile, ios::ate | ios::app);
         log << tokens[1] <<endl;
         log << SHA <<endl;
-        log << client;
-        log << ":" << port <<endl;
+        log << client <<endl;
         log.close();
       }
       else   // SHA string already present

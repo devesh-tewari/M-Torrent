@@ -1,2 +1,2 @@
 using namespace std;
-void download( char* , char* );
+void pollPieces( char* , char* );

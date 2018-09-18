@@ -55,7 +55,7 @@ string get_hash( char* path )
 
       char hashstr[41];
       for(i = 0; i<20; ++i)
-        sprintf(&hashstr[i*2], "%02X", hash[i]);
+        sprintf(&hashstr[i*2], "%02x", hash[i]);
 
       hashstr[20]='\0';
       string temp(hashstr);
@@ -86,7 +86,7 @@ string SHAofSHAstr( string sha )
 
   char hashstr[41];
   for(i = 0; i<20; ++i)
-    sprintf(&hashstr[i*2], "%02X", hash[i]);
+    sprintf(&hashstr[i*2], "%02x", hash[i]);
   hashstr[20]='\0';
   string SHA(hashstr);
 

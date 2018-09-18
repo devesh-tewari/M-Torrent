@@ -10,11 +10,17 @@
 #include <netinet/in.h>
 #include <bits/stdc++.h>
 #include <fstream>
+#include <math.h>
 
 #include "makeMtorrent.h"
 #include "download.h"
+#include "seed.h"
 
 using namespace std;
+
+map < string, string > hashPath;  //maps shared hash string to local file path
+
+map < string, string > hashPieces;  //pieces i have (bitmap)
 
 #define Tracker1port 8002
 #define Tracker1IP "10.1.37.71"
@@ -22,6 +28,7 @@ using namespace std;
 #define listenPort 8020
 
 #define bufSize 1024
+char paths[]="file_paths.txt";
 
 bool getCommand;
 bool shareCommand;
@@ -63,6 +70,8 @@ string processCommand( string s )
 
   if( strcmp(tokens[0],"share") == 0 )
 	{
+      string localFilePath(tokens[1]);
+
       shareCommand = true;
       //for(int i=0;i<size;i++)
         //cout<<tokens[i]<<endl;
@@ -71,19 +80,33 @@ string processCommand( string s )
       //cout<<ch<<"  fd";
 
       SHA=get_hash(ch);
+      int file_size = getFilesize( tokens[1] );
       //cout<<s;
       ofstream Mtor (tokens[2], ios_base::ate);
       Mtor << "<tracker_1_ip>:<port>" <<endl;
       Mtor << "<tracker_2_ip>:<port>" <<endl;
       Mtor << "<filename>" <<endl;
-      Mtor << "<filesize in bytes>" <<endl;
+      Mtor << to_string(file_size) <<endl;
       Mtor << SHA <<endl;
       Mtor.close();
 
       filename = get_file_name_from_path(tokens[1]);
 
       SHA = SHAofSHAstr( SHA );   //SHA1 of SHA1 string
-cout<<to_string(listenPort);
+//cout<<to_string(listenPort);
+
+      int pieces = ceil( (float)file_size / 524288.0 );
+      string bitmap="";
+      for(int i=0; i<pieces; i++)
+        bitmap = bitmap + "1";
+
+      hashPath[SHA] = localFilePath;
+      ofstream map_file( paths , ios::app );
+      map_file << SHA <<endl;
+      map_file << localFilePath <<endl;
+      map_file << bitmap << endl; //bitmap
+      map_file.close();
+
       return commandName + " " + filename + " " + SHA + " " + to_string(listenPort);
 
 	}
@@ -113,20 +136,35 @@ cout<<to_string(listenPort);
 
 int main()
 {
+    string line;
+    ifstream path_file(paths);
+    while ( getline (path_file,line) )
+    {
+      SHA = line;
+      getline (path_file,line);  //path of that SHA
+      hashPath[SHA] = line;
+      getline (path_file,line);  //pieces bitmap
+      hashPieces[SHA] = line;
+    }
+    path_file.close();
+
     int sockfd;
     char buffer[bufSize];
     //char hello[] = "Hello from client";
 
-                              /*make seederlist command*/
+    while(1)
+{
+
     getCommand = false;
     shareCommand = false;
     string command;           //
     cout<<"Enter command: ";
     getline (cin, command);
     command = processCommand(command);
-    //cout<<command<<endl;
-             //
+    /*if( command == "exit" )
+    {
 
+    }*/
 
     struct sockaddr_in servAdd;
 
@@ -154,15 +192,21 @@ int main()
 
     if ( getCommand )
     {
-      download( buffer, &SHA[0] );
+      pollPieces( buffer, &SHA[0] );
     }
 
-    if( shareCommand )
+    int pid;
+    if( shareCommand )   //kill(pid, SIGKILL);/* or */kill(pid, SIGTERM); to stop seeding
     {
-      int pid = fork();
+      pid = fork();
       if(pid==0)
-        seed( SHA );
+      {
+        seed( listenPort );
+        exit(1);
+      }
     }
     close(sockfd);
+
+}
     return 0;
 }
