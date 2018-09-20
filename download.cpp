@@ -9,6 +9,7 @@
 #include <vector>
 #include <bits/stdc++.h>
 #include <iostream>
+#include <thread>
 
 using namespace std;
 
@@ -102,11 +103,20 @@ cout<<"Input to piece slector: "<<availablePieces[0]<<endl;
   vector<string> selectedPieces ( decidePieces( availablePieces, no_of_clients, totalPieces ) );
 
 cout<<"download"<<selectedPieces.size()<<" times"<<endl;
+
+  thread download_thread[ selectedPieces.size() ];
+
   for(int j=0; j<selectedPieces.size(); j++)
   {
-    download( clients[j], selectedPieces[j] );
+    download_thread[j] = thread( download, clients[j], selectedPieces[j] );
   }
 
+  for(int j=0; j<selectedPieces.size(); j++)
+  {
+    download_thread[j].join();
+  }
+
+  return;
 }
 
 vector<string> decidePieces(vector<string> av, int c, int len)
@@ -114,7 +124,7 @@ vector<string> decidePieces(vector<string> av, int c, int len)
   if( av.size() == 1 )
     return av;
 
-  int i,j,k;
+  int i,j;
 
   pair<int,int> p;  // <number of pieces, client number>
   vector< pair<int,int> > no_of_pieces;  //stores number of pieces a clientNumber has
@@ -144,50 +154,43 @@ vector<string> decidePieces(vector<string> av, int c, int len)
   int min;
   sort( no_of_pieces.begin(), no_of_pieces.end() );//the client number will remain intact because of pair
 
-  int n = len / c;  //atmost pieces to take from each client(initially)
+  int count;
+  int n;
+  n = (float)len / (float)c  ;  //atmost pieces to take from each client(initially)
 
-  for(i=0; i<c; i++)
+  while( notDone )
   {
-      int min = no_of_pieces[i].second;
-      int count = 0;
-      for(j=0; j<len; j++)
+      for(i=0; i<c; i++)
       {
-        if( av[min][j] == '1' && Sel[j] == false )
-        {
-            Sel[j] = true;
-            selected[min][j] = '1';
-            count++;
-            if( count >= n )  //select atmost n to divide equally
-                break;
-        }
-      }
-  }
-
-  notDone = false;
-  for(i=0; i<len; i++)   //check if all pieces are selected
-  {
-      if( Sel[i] == false )
-      {
-        notDone = true;
-        break;
-      }
-  }
-
-  if(notDone)
-  {
-      int max;
-      for(i=c-1; i>=0; i--)
-      {
-        max = no_of_pieces[i].second;  //start to select the remaining pieces from maximum pieces
-        for(j=0; j<len; j++)
-        {
-          if( Sel[j] == false && av[max][j] == '1' )
+          int min = no_of_pieces[i].second;
+          count = 0;
+          for(j=0; j<len; j++)
           {
-            Sel[j] = true;
-            selected[max][j] = '1';
+              if( av[min][j] == '1' && Sel[j] == false )
+              {
+                  Sel[j] = true;
+                  selected[min][j] = '1';
+                  count++;
+                  if( count >= n )  //select atmost n to divide equally
+                  {
+                      break;
+                  }
+              }
           }
-        }
       }
+
+      notDone = false;
+      for(i=0; i<len; i++)   //check if all pieces are selected
+      {
+          if( Sel[i] == false )
+          {
+            notDone = true;
+            break;
+          }
+      }
+
+      n++;  // if there are some pieces left, increase pieces per client by 1
+
   }
 
   return selected;
@@ -231,7 +234,7 @@ void download( char* cliAdd, string bitmap )
 
   char buffer[1024] = {0};
 
-  int j=1;
+  int j;
   for(int i=0; i<strlen( &bitmap[0] ); i++)
   {
     if( bitmap[i] == '1' )
@@ -243,7 +246,7 @@ void download( char* cliAdd, string bitmap )
             return;
         }
 
-        string req = "givePiece " + SHAofSHA + " " + to_string(i);
+        string req = "givePieces " + SHAofSHA + " " + to_string(i);
         cout<<req<<endl;
 
         send(sock , &req[0] , strlen(&req[0]) , 0 );
@@ -252,15 +255,25 @@ void download( char* cliAdd, string bitmap )
         printf("%s\n",buffer );
 
         char sendAny[] = "keepSending";
+
+        ofstream downFile("downloaded", ios::binary);
+        downFile.seekp(i*524288, ios::beg);
+        j=512;
         while( j-- )
         {
             send(sock , sendAny , strlen(sendAny) , 0 );
-            printf("piece received\n");
+            //printf("piece received\n");
             valread = read( sock , buffer, 1024);
-            printf("seeder :%s\n",buffer );
+
+            downFile.write( buffer, 1024 );
+
+            //printf("seeder :%s\n",buffer );
         }
+        downFile.close();
     }
   }
+
+  return;
 }
 /*int main()
 {

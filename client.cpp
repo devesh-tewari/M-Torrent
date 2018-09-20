@@ -11,6 +11,7 @@
 #include <bits/stdc++.h>
 #include <fstream>
 #include <math.h>
+#include <thread>
 
 #include "makeMtorrent.h"
 #include "download.h"
@@ -131,6 +132,29 @@ string processCommand( string s )
 
   }
 
+  else if( strcmp(tokens[0],"remove") == 0 && tokens[1]!=NULL )
+	{
+    commandName = "remove";
+
+    ifstream Mtor ( tokens[1] );
+
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );
+    getline ( Mtor,SHA );  //this is the SHA concatenated string
+    Mtor.close();
+
+    SHA = SHAofSHAstr( SHA );  //SHA of SHA concatenated string
+
+    string mtorr(tokens[1]);
+    if(mtorr.substr(mtorr.find_last_of(".") + 1) == "mtorrent")  //delete the mtorrent file
+      remove(tokens[1]);
+
+    return commandName + " " + SHA + " " + to_string(listenPort);
+
+  }
+
 
 }
 
@@ -192,18 +216,14 @@ int main()
 
     if ( getCommand )
     {
-      pollPieces( buffer, &SHA[0] );
+      pollPieces( buffer, &SHA[0] );  //this will poll pieces for each client and download the file
     }
 
     int pid;
-    if( shareCommand )   //kill(pid, SIGKILL);/* or */kill(pid, SIGTERM); to stop seeding
+    if( shareCommand )
     {
-      pid = fork();
-      if(pid==0)
-      {
-        seed( listenPort );
-        exit(1);
-      }
+      thread t( seed, listenPort );
+      t.detach();
     }
     close(sockfd);
 

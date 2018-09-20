@@ -8,6 +8,8 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 
@@ -15,6 +17,63 @@ extern map < string, string > hashPath;
 extern map < string, string > hashPieces;
 
 void upload( char*, int, int);
+
+void handleReq( int new_socket, char* buffer )
+{
+  int valread = read( new_socket , buffer, 1024);
+  printf("Requester: %s\n",buffer );
+
+  char reply[1024];
+  if( buffer!=NULL )
+  {
+    char* token;
+    token = strtok(buffer," ");
+    vector<char*> tokens;
+    tokens.push_back(token);
+    while (token != NULL)
+    {
+        //cout<<tokens[i++]<<endl;
+        token = strtok(NULL," ");
+        tokens.push_back( token );
+    }
+
+    if( strcmp(tokens[0], "givePieces") == 0 )
+    {
+        strcpy(reply,"give hmm");
+        cout<<"received piece req"<<endl;
+        send(new_socket , reply , strlen(reply) , 0 );
+        cout<<"giving piece"<<endl;
+
+        cout<<"Tokens[0] = "<<tokens[0]<<endl;
+        cout<<"Tokens[1] = "<<tokens[1]<<endl;
+        if( tokens[1]!=NULL && tokens[2]!=NULL )
+        {
+            string s(tokens[1]);   //SHA
+            string p(tokens[2]);   //piece number to be read
+            cout<<"s: "<<s<<endl;
+            string path = hashPath[s];
+            cout<<"Path : "<<path<<endl;
+            char* cpath = &path[0];
+            cout<<"read from: "<<cpath<<endl;
+
+            upload( cpath, atoi(tokens[2]), new_socket );
+        }
+    }
+
+    //{}  //sendPiece
+    else
+    {
+      string SHA(buffer);
+      strcpy( reply, &hashPieces[SHA][0] );
+    }
+    //cout<<hashPath[SHA];
+  }
+
+  send(new_socket , reply , strlen(reply) , 0 );
+  printf("Pieces/Bitmap sent\n");
+
+  return;
+}
 
 void seed(int listenPort)
 {
@@ -55,81 +114,34 @@ void seed(int listenPort)
         exit(EXIT_FAILURE);
     }
 
-    char reply[1024];
     int j;
     while(1)
     {
         //if(remove) return;
+        cout<<"accepting.."<<endl;
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
         {
-            perror("accept");
-            exit(EXIT_FAILURE);
-        }
-        valread = read( new_socket , buffer, 1024);
-        printf("Requester: %s\n",buffer );
-
-        if( buffer!=NULL )
-        {
-          char* token;
-          token = strtok(buffer," ");
-          vector<char*> tokens;
-          tokens.push_back(token);
-          while (token != NULL)
-          {
-            //cout<<tokens[i++]<<endl;
-            token = strtok(NULL," ");
-            tokens.push_back( token );
-          }
-
-          if( strcmp(tokens[0], "givePiece") == 0 )
-          {
-              strcpy(reply,"give hmm");
-              cout<<"received piece req"<<endl;
-              send(new_socket , reply , strlen(reply) , 0 );
-              cout<<"giving piece"<<endl;
-
-              cout<<"Tokens[0] = "<<tokens[0]<<endl;
-              cout<<"Tokens[1] = "<<tokens[1]<<endl;
-              if( tokens[1]!=NULL && tokens[2]!=NULL )
-              {
-                  string s(tokens[1]);   //SHA
-                  string p(tokens[2]);   //piece number to be read
-                  cout<<"s: "<<s<<endl;
-                  string path = hashPath[s];
-                  cout<<"Path : "<<path<<endl;
-                  char* cpath = &path[0];
-                  cout<<"read from: "<<cpath<<endl;
-
-                  upload(cpath, atoi(tokens[2]), new_socket);
-               }
-            }
-
-          //{}  //sendPiece
-          else
-          {
-            string SHA(buffer);
-            strcpy( reply, &hashPieces[SHA][0] );
-          }
-          //cout<<hashPath[SHA];
+            perror("Connection accept error");
         }
 
-        send(new_socket , reply , strlen(reply) , 0 );
-        printf("Pieces/Bitmap sent\n");
+        thread t( handleReq, new_socket, buffer );
+        t.detach();
     }
 }
 
 void upload( char* cpath, int piece, int new_socket )
 {
-  ifstream upFile ( cpath );
+  ifstream upFile ( cpath, ios::binary );
   upFile.seekg(piece*524288, ios::beg);  //point to beggining of ith piece
   char buffer[1024];
   int valread;
-  int j=1;
-  while( j-- )
+  int j=512;
+  while( j-- && upFile.read( buffer, 1024 ) )
   {
-      upFile.read( buffer, 1024 );
       send(new_socket , buffer , 1024 , 0 );
       valread = read( new_socket , buffer, 1024);
   }
+  //cout<<"j :"<<j<<endl;
   upFile.close();
+  return;
 }

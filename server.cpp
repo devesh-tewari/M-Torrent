@@ -12,6 +12,7 @@
 #include <vector>
 #include <netinet/in.h>
 #include <fstream>
+#include <thread>
 
 #define port 8002
 #define otherTrackerIP 0
@@ -21,6 +22,8 @@
 using namespace std;
 
 map < string, set<string> > seedersHash;  // stores the mapping of SHA hash to seeding clients
+
+void handleRequest( struct sockaddr_in, char*, unsigned int, int );
 
 string REPLY;
 char* processRequest(char* buf, char* addr)
@@ -118,6 +121,56 @@ char logfile[] = "logfile.txt";
           buf = &REPLY[0];
           return buf;
       }
+
+      else if( strcmp(tokens[0],"remove") == 0 && tokens[1]!=NULL && tokens[2]!=NULL )
+    	{
+        set<string> s;
+        string SHA(tokens[1]);
+        string client(addr);
+        string cliListenPort(tokens[2]);
+        client = client + ":" + cliListenPort;
+
+        if( seedersHash[SHA].find(client) != seedersHash[SHA].end() )  //client not already present
+        {
+            seedersHash[SHA].erase(client);
+            vector<string> file;
+            string line,logCli;
+            ifstream log(logfile);
+            while ( getline (log,line) )
+            {
+                if( SHA == line )
+                {
+                    file.push_back(line);
+                    getline(log,logCli);   //tokenize clients and store it in a set
+                    token = strtok (&logCli[0]," ");
+                    string cl(token);
+                    if( cl == client )
+                      cl="";
+                    while (token != NULL)
+                    {
+                      token = strtok(NULL," ");
+                      if(token!=NULL)
+                      {
+                        string cl1(token);
+                        if( cl1 != client )  //remove client from seederlist file
+                          cl = cl + " " + cl1;
+                      }
+                    }
+                    file.push_back(cl);
+                }
+                else
+                    file.push_back(line);
+              }
+              log.close();
+              ofstream log1 ( logfile, ios::ate );
+              for(int i=0; i<file.size(); i++)
+                  log1 << file[i] <<endl;
+              log1.close();
+          }
+          REPLY = "Removed";
+          buf = &REPLY[0];
+          return buf;
+        }
     }
   return buf;
 }
@@ -185,20 +238,27 @@ int main()
       n = recvfrom(sockfd, (char *)buffer, bufSize, MSG_WAITALL, ( struct sockaddr *) &cliAdd, &len);
       buffer[n] = '\0';
 
-      string CliIP( inet_ntoa(cliAdd.sin_addr) );
-      //int CliPort = ntohs(cliAdd.sin_port);  //give the tracker port that the client will listen on
-      //string clientSocket = CliIP + ":" + to_string(CliPort);
-      cout<<"Client Address: "<<CliIP<<endl;
-      printf("Client : %s\n", buffer);
-
-      char reply[1024];
-      strcpy( reply , processRequest( buffer, &CliIP[0] ) );
-      //cout<<buffer<<endl;
-
-      cout<<strlen(reply)<<endl;
-      sendto(sockfd, (char *)reply, bufSize, MSG_CONFIRM, (const struct sockaddr *) &cliAdd, len);
-      printf("Reply sent.\n");
+      thread t( handleRequest, cliAdd, buffer, len, sockfd );
+      t.detach();
     }
 
     return 0;
+}
+
+void handleRequest( struct sockaddr_in cliAdd, char* buffer, unsigned int len, int sockfd )
+{
+  string CliIP( inet_ntoa(cliAdd.sin_addr) );
+  //int CliPort = ntohs(cliAdd.sin_port);  //give the tracker port that the client will listen on
+  //string clientSocket = CliIP + ":" + to_string(CliPort);
+  cout<<"Client Address: "<<CliIP<<endl;
+  printf("Client : %s\n", buffer);
+
+  char reply[1024];
+  strcpy( reply , processRequest( buffer, &CliIP[0] ) );
+  //cout<<buffer<<endl;
+
+  cout<<strlen(reply)<<endl;
+  sendto(sockfd, (char *)reply, bufSize, MSG_CONFIRM, (const struct sockaddr *) &cliAdd, len);
+  printf("Reply sent.\n");
+  return;
 }
