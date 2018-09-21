@@ -31,6 +31,7 @@ void pollPieces( char* clientList, char* SHA )
 {
   string temp(SHA);
   SHAofSHA = temp;
+  //cout<<SHAofSHA<<" yaela";
   char* token;
   token = strtok (clientList," ");
   vector<char*> clients;
@@ -288,7 +289,7 @@ char sendAny[] = "keepSending";
                 //printf("piece received\n");
                 valread = recv( sock , buffer, 1024, 0);
                 //buffer[1024] = '\0';
-                cout<<buffer<<" "<<i<<endl;
+                //cout<<buffer<<" "<<i<<endl;
                 fwrite( buffer, valread, 1, downFile );
                 //downFile.write( buffer, strlen(buffer) );
                 j++;
@@ -309,7 +310,7 @@ char sendAny[] = "keepSending";
             //printf("piece received\n");
             recv( sock , buffer, 1024, 0);
             //buffer[1024] = '\0';
-            cout<<buffer<<" "<<i<<endl;
+            //cout<<buffer<<" "<<i<<endl;
             fwrite( buffer, 1024, 1, downFile );
             //downFile.write( buffer, strlen(buffer) );
             j++;

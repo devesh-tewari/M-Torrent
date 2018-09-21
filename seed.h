@@ -1,2 +1,2 @@
 using namespace std;
-void seed(int);
+void seed(int,string);

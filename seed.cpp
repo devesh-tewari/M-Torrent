@@ -16,6 +16,7 @@ using namespace std;
 
 extern map < string, string > hashPath;
 extern map < string, string > hashPieces;
+extern map < string, bool > Remove;
 
 void upload( char*, char*, int);
 
@@ -65,7 +66,9 @@ void handleReq( int new_socket, char* buffer )
     else
     {
       string SHA(buffer);
+      SHA = SHA.substr(0,20);
       strcpy( reply, &hashPieces[SHA][0] );
+      //cout<<hashPieces[SHA]<<endl;
       send(new_socket , reply , strlen(reply) , 0 );
     }
     //cout<<hashPath[SHA];
@@ -77,7 +80,7 @@ void handleReq( int new_socket, char* buffer )
   return;
 }
 
-void seed(int listenPort)
+void seed(int listenPort, string SHA)
 {
     int server_fd, new_socket, valread;
     struct sockaddr_in address;
@@ -112,12 +115,12 @@ void seed(int listenPort)
 
     if (listen(server_fd, 3) < 0)
     {
-        perror("listen");
+        perror("listen error");
         exit(EXIT_FAILURE);
     }
 
     int j;
-    while(1)
+    while( Remove[SHA] == false )
     {
         //if(remove) return;
         cout<<"accepting.."<<endl;

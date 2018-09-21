@@ -33,6 +33,8 @@ char paths[]="file_paths.txt";
 
 bool getCommand;
 bool shareCommand;
+bool removeCommand;
+map < string, bool > Remove;
 
 string get_file_name_from_path(char* path)  //this function returns the last folder from an input path
 {
@@ -95,6 +97,7 @@ string processCommand( string s )
 
       SHA = SHAofSHAstr( SHA );   //SHA1 of SHA1 string
 //cout<<to_string(listenPort);
+      Remove[SHA] = false;
 
       int pieces = ceil( (float)file_size / 524288.0 );
       string bitmap="";
@@ -102,6 +105,7 @@ string processCommand( string s )
         bitmap = bitmap + "1";
 
       hashPath[SHA] = localFilePath;
+      hashPieces[SHA] = bitmap;
       ofstream map_file( paths , ios::app );
       map_file << SHA <<endl;
       map_file << localFilePath <<endl;
@@ -147,6 +151,8 @@ string processCommand( string s )
 
     SHA = SHAofSHAstr( SHA );  //SHA of SHA concatenated string
 
+    Remove[SHA] = true;
+
     string mtorr(tokens[1]);
     if(mtorr.substr(mtorr.find_last_of(".") + 1) == "mtorrent")  //delete the mtorrent file
       remove(tokens[1]);
@@ -176,6 +182,14 @@ int main()
     char buffer[bufSize];
     //char hello[] = "Hello from client";
 
+    struct sockaddr_in servAdd;
+
+    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
+    {
+        perror("socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
     while(1)
 {
 
@@ -184,19 +198,10 @@ int main()
     string command;           //
     cout<<"Enter command: ";
     getline (cin, command);
+    if( command == "exit" )
+      break;
+
     command = processCommand(command);
-    /*if( command == "exit" )
-    {
-
-    }*/
-
-    struct sockaddr_in servAdd;
-
-    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
-    {
-        perror("socket creation failed");
-        exit(EXIT_FAILURE);
-    }
 
     memset(&servAdd, 0, sizeof(servAdd));
 
@@ -216,17 +221,19 @@ int main()
 
     if ( getCommand )
     {
-      pollPieces( buffer, &SHA[0] );  //this will poll pieces for each client and download the file
-    }
-
-    int pid;
-    if( shareCommand )
-    {
-      thread t( seed, listenPort );
+      if( strcmp(buffer, "NONE" ) == 0 )  //if there are no seeders available
+        continue;
+      thread t( pollPieces, buffer, &SHA[0] );  //this will poll pieces for each client and download the file
       t.detach();
     }
-    close(sockfd);
+
+    else if( shareCommand )
+    {
+      thread t( seed, listenPort, SHA );
+      t.detach();
+    }
 
 }
+    close(sockfd);
     return 0;
 }

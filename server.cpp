@@ -111,7 +111,7 @@ char logfile[] = "logfile.txt";
           REPLY="";
           if( seedersHash.find(SHA) == seedersHash.end() ) //SHA string not present
           {
-            REPLY = "NOseeders";
+            REPLY = "NONE";
           }
           else
           {
@@ -157,6 +157,14 @@ char logfile[] = "logfile.txt";
                       }
                     }
                     file.push_back(cl);
+                    cout<<strlen(&cl[0])<<endl;
+                    if( strlen(&cl[0]) < 9 ) //if no clients left
+                    {
+                        file.pop_back();
+                        file.pop_back();
+                        file.pop_back();
+                        seedersHash.erase(SHA);
+                    }
                 }
                 else
                     file.push_back(line);
@@ -190,19 +198,22 @@ int main()
         getline(log,logSHA);
         getline(log,logCli);   //tokenize clients and store it in a set
         token = strtok (&logCli[0]," ");
-        string client(token);
-        s.clear();
-        s.insert(client);
-        while (token != NULL)
+        if(token!=NULL)
         {
-          token = strtok(NULL," ");
-          if(token!=NULL)
+          string client(token);
+          s.clear();
+          s.insert(client);
+          while (token != NULL)
           {
-            cli1 = string(token);
-            s.insert(string(token) );
+            token = strtok(NULL," ");
+            if(token!=NULL)
+            {
+              cli1 = string(token);
+              s.insert(string(token) );
+            }
           }
+          seedersHash[logSHA] = s;
         }
-        seedersHash[logSHA] = s;
       }
       log.close();
     }
