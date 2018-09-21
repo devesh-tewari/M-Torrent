@@ -9,14 +9,15 @@
 #include <fstream>
 #include <vector>
 #include <thread>
-#include <chrono>
+
+#include "makeMtorrent.h"
 
 using namespace std;
 
 extern map < string, string > hashPath;
 extern map < string, string > hashPieces;
 
-void upload( char*, int, int);
+void upload( char*, char*, int);
 
 void handleReq( int new_socket, char* buffer )
 {
@@ -56,7 +57,7 @@ void handleReq( int new_socket, char* buffer )
             char* cpath = &path[0];
             cout<<"read from: "<<cpath<<endl;
 
-            upload( cpath, atoi(tokens[2]), new_socket );
+            upload( cpath, tokens[2], new_socket );
         }
     }
 
@@ -65,11 +66,12 @@ void handleReq( int new_socket, char* buffer )
     {
       string SHA(buffer);
       strcpy( reply, &hashPieces[SHA][0] );
+      send(new_socket , reply , strlen(reply) , 0 );
     }
     //cout<<hashPath[SHA];
   }
 
-  send(new_socket , reply , strlen(reply) , 0 );
+
   printf("Pieces/Bitmap sent\n");
 
   return;
@@ -125,23 +127,79 @@ void seed(int listenPort)
         }
 
         thread t( handleReq, new_socket, buffer );
+
         t.detach();
+
     }
 }
 
-void upload( char* cpath, int piece, int new_socket )
+void upload( char* cpath, char* pieces, int new_socket )
 {
-  ifstream upFile ( cpath, ios::binary );
-  upFile.seekg(piece*524288, ios::beg);  //point to beggining of ith piece
+  int size = getFilesize(cpath);
+  FILE* upFile;
+  upFile =  fopen( cpath, "rb" );
+  //upFile.seekg( i*524288 , ios::beg);
+  int pos;
+  cout<<"inside upload func"<<endl;
   char buffer[1024];
   int valread;
-  int j=512;
-  while( j-- && upFile.read( buffer, 1024 ) )
+  cout<<"Requested pieces: "<<pieces;
+  cout<<"no of pieces: "<<strlen(pieces)<<endl;
+  for( int i=0; i<strlen(pieces); i++ )
   {
-      send(new_socket , buffer , 1024 , 0 );
-      valread = read( new_socket , buffer, 1024);
+      if( pieces[i] == '1' )
+      {
+          if( i == strlen(pieces)-1 )
+          {
+                pos = i*524288;
+                fseek( upFile, pos, SEEK_SET ); //point to beggining of ith piece
+
+                int j=0;
+                while( j<= ((size/1024)%512) )
+                {
+                    //valread = read( new_socket , buffer, 20);
+                    if( j == ((size/1024)%512) )
+                    {
+                        //memset(&buffer,'\0',1024);
+                        //upFile.read( buffer, 1024 );
+                        fread(buffer, 1024, 1, upFile);
+                        buffer[size%512] = '\0';
+                        //cout<<buffer<<" "<<i<<endl;
+                        send(new_socket , buffer , size%512 , 0 );
+                        break;
+                    }
+                    //memset(&buffer,'\0',1024);
+                    //upFile.read( buffer, 1024 );
+                    fread(buffer, 1024, 1, upFile);
+                    buffer[1024] = '\0';
+                    //cout<<buffer<<" "<<i<<endl;
+                    send(new_socket , buffer , 1024 , 0 );
+
+                    j++;
+                }
+                cout<<"mod: "<<size%512;
+                break;
+          }
+          pos = i*524288;
+          fseek( upFile, pos, SEEK_SET );  //point to beggining of ith piece
+
+          int j=0;
+          while( j<512 )
+          {
+              //valread = read( new_socket , buffer, 20);
+              memset(&buffer,'\0',1024);
+              fread(buffer, 1024, 1, upFile);
+              buffer[1024] = '\0';
+              //cout<<buffer<<" "<<i<<endl;
+              send(new_socket , buffer , 1024 , 0 );
+
+              j++;
+          }
+          //cout<<"i: "<<i<<endl;
+      }
+      //cout<<"j :"<<j<<endl;
+
   }
-  //cout<<"j :"<<j<<endl;
-  upFile.close();
+  fclose(upFile);
   return;
 }

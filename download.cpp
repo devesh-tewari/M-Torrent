@@ -11,9 +11,15 @@
 #include <iostream>
 #include <thread>
 
+#include "makeMtorrent.h"
+
 using namespace std;
 
 #define max_pieces 1200
+
+extern map < string, string > hashPath;  //maps shared hash string to local file path
+
+extern map < string, string > hashPieces;  //pieces i have (bitmap)
 
 vector<string> decidePieces(vector<string>, int, int);
 
@@ -102,7 +108,7 @@ void pollPieces( char* clientList, char* SHA )
 cout<<"Input to piece slector: "<<availablePieces[0]<<endl;
   vector<string> selectedPieces ( decidePieces( availablePieces, no_of_clients, totalPieces ) );
 
-cout<<"download"<<selectedPieces.size()<<" times"<<endl;
+cout<<"download "<<selectedPieces.size()<<" times"<<endl;
 
   thread download_thread[ selectedPieces.size() ];
 
@@ -232,47 +238,90 @@ void download( char* cliAdd, string bitmap )
     return;
   }
 
+  int j;
+
+  cout<<"about to req piece "<<endl;
+  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+  {
+      printf("\nConnection Failed \n");
+      return;
+  }
+
+  string req = "givePieces " + SHAofSHA + " " + &bitmap[0];
+  cout<<req<<endl;
+
   char buffer[1024] = {0};
 
-  int j;
+  send(sock , &req[0] , strlen(&req[0]) , 0 );
+  printf("Pieces req Sent\n");
+  valread = read( sock , buffer, 1024);
+  printf("%s\n",buffer );
+  memset(&buffer,'\0',1024);
+
+  int size;
+  size = getFilesize( &hashPath[ SHAofSHA ][0] );
+
+
+  int pos;
+  cout<<"bitmap len: "<<strlen( &bitmap[0] );
+  //ofstream df("down.txt", ios::binary );
+  //df.close();
+  FILE *downFile ;
+  downFile = fopen("d.txt", "wb");
+char sendAny[] = "keepSending";
+
   for(int i=0; i<strlen( &bitmap[0] ); i++)
   {
     if( bitmap[i] == '1' )
     {
-        cout<<"about to req piece "<<i<<" : ";
-        if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        if( i == strlen( &bitmap[0] )-1 )
         {
-            printf("\nConnection Failed \n");
-            return;
+            pos = i*524288;
+            cout<<"pos: "<<pos;
+            //downFile.seekp( pos );
+            fseek( downFile, pos, SEEK_SET );
+            j=0;
+            while( j<= (size/1024)%512 )//&& size > 0 )
+            {
+
+                //send(sock , sendAny , strlen(sendAny) , 0 );
+                //printf("piece received\n");
+                valread = recv( sock , buffer, 1024, 0);
+                //buffer[1024] = '\0';
+                cout<<buffer<<" "<<i<<endl;
+                fwrite( buffer, valread, 1, downFile );
+                //downFile.write( buffer, strlen(buffer) );
+                j++;
+                //size--;
+            }
+            cout<<"i: "<<i<<endl;
+            break;
         }
 
-        string req = "givePieces " + SHAofSHA + " " + to_string(i);
-        cout<<req<<endl;
-
-        send(sock , &req[0] , strlen(&req[0]) , 0 );
-        printf("Piece req Sent sent\n");
-        valread = read( sock , buffer, 1024);
-        printf("%s\n",buffer );
-
-        char sendAny[] = "keepSending";
-
-        ofstream downFile("downloaded", ios::binary);
-        downFile.seekp(i*524288, ios::beg);
-        j=512;
-        while( j-- )
+        pos = i*524288;
+        cout<<"pos: "<<pos;
+        //downFile.seekp( pos );
+        fseek( downFile, pos, SEEK_SET );
+        j=0;
+        while( j< 512 )//&& size > 0 )
         {
-            send(sock , sendAny , strlen(sendAny) , 0 );
+            //send(sock , sendAny , strlen(sendAny) , 0 );
             //printf("piece received\n");
-            valread = read( sock , buffer, 1024);
-
-            downFile.write( buffer, 1024 );
-
-            //printf("seeder :%s\n",buffer );
+            recv( sock , buffer, 1024, 0);
+            //buffer[1024] = '\0';
+            cout<<buffer<<" "<<i<<endl;
+            fwrite( buffer, 1024, 1, downFile );
+            //downFile.write( buffer, strlen(buffer) );
+            j++;
+            //size--;
         }
-        downFile.close();
-    }
-  }
+        cout<<"i: "<<i<<endl;
 
+    }
+
+  }
+  cout<<"SIZE: "<<hashPath[ SHAofSHA ]<<" "<<size<<endl;
+  fclose(downFile);
   return;
 }
 /*int main()
