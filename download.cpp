@@ -12,8 +12,11 @@
 #include <thread>
 
 #include "makeMtorrent.h"
+#include "seed.h"
 
 using namespace std;
+
+extern int listenPort;
 
 #define max_pieces 1200
 
@@ -21,9 +24,15 @@ extern map < string, string > hashPath;  //maps shared hash string to local file
 
 extern map < string, string > hashPieces;  //pieces i have (bitmap)
 
+extern map < string, bool > Remove;
+
+extern map < string, string > downloads;
+
 vector<string> decidePieces(vector<string>, int, int);
 
-void download( char*, string );
+extern bool firstShare;
+
+void download( char*, string, string );
 
 string SHAofSHA;
 
@@ -48,12 +57,12 @@ void pollPieces( char* clientList, char* SHA )
   int sock = 0, valread;
   struct sockaddr_in serv_addr;
   //char *hello = "Hello from client";
-  char buffer[1024] = {0};
+  char buffer[2048] = {0};
 
   int i;
   vector<string> availablePieces;
 
-  for(i = 0; i < no_of_clients; i++ )  //actually here the clients are servevrs from which we want to download
+  for(i = 0; i < no_of_clients; i++ )  //actually here the clients are seeders from which we want to download
   {
     if( clients[i] != NULL )
     {
@@ -90,11 +99,14 @@ void pollPieces( char* clientList, char* SHA )
           printf("\nConnection Failed \n");
           return;
       }
-      cout<<"Bit map for? "<<SHA<<endl;
-      send(sock , SHA , strlen(SHA) , 0 );
+      //cout<<"bitMapFor? "<<SHA<<endl;
+      char bitMapReq[1024];
+      strcpy( bitMapReq, "bitMapFor? " );
+      strcat( bitMapReq, SHA );
+      send(sock , bitMapReq , strlen(bitMapReq) , 0 );
       //printf("SHA sent\n");
-      valread = read( sock , buffer, 1024);
-      printf("Bitmap :%s\n",buffer );
+      valread = read( sock , buffer, 2048);
+      //printf("Bitmap :%s\n",buffer );
 
       if( buffer != NULL )
       {
@@ -106,22 +118,30 @@ void pollPieces( char* clientList, char* SHA )
   }
 
   int totalPieces = strlen(&availablePieces[0][0]);
-cout<<"Input to piece slector: "<<availablePieces[0]<<endl;
+//cout<<"Input to piece slector: "<<availablePieces[0]<<endl;
   vector<string> selectedPieces ( decidePieces( availablePieces, no_of_clients, totalPieces ) );
 
-cout<<"download "<<selectedPieces.size()<<" times"<<endl;
+  string bitmap="";
+  for(int i=0; i<totalPieces; i++)
+    bitmap = bitmap + "0";
+
+  hashPieces[SHAofSHA] = bitmap;
+
+//cout<<"download "<<selectedPieces.size()<<" times"<<endl;
 
   thread download_thread[ selectedPieces.size() ];
 
   for(int j=0; j<selectedPieces.size(); j++)
   {
-    download_thread[j] = thread( download, clients[j], selectedPieces[j] );
+    download_thread[j] = thread( download, clients[j], selectedPieces[j], hashPath[SHAofSHA] );
   }
 
   for(int j=0; j<selectedPieces.size(); j++)
   {
     download_thread[j].join();
   }
+
+  downloads[SHAofSHA][1] = 'S';
 
   return;
 }
@@ -161,7 +181,7 @@ vector<string> decidePieces(vector<string> av, int c, int len)
   int min;
   sort( no_of_pieces.begin(), no_of_pieces.end() );//the client number will remain intact because of pair
 
-  int count;
+  int count[c] = {0};
   int n;
   n = (float)len / (float)c  ;  //atmost pieces to take from each client(initially)
 
@@ -170,15 +190,14 @@ vector<string> decidePieces(vector<string> av, int c, int len)
       for(i=0; i<c; i++)
       {
           int min = no_of_pieces[i].second;
-          count = 0;
           for(j=0; j<len; j++)
           {
               if( av[min][j] == '1' && Sel[j] == false )
               {
                   Sel[j] = true;
                   selected[min][j] = '1';
-                  count++;
-                  if( count >= n )  //select atmost n to divide equally
+                  count[min]++;
+                  if( count[min] >= n )  //select atmost n to divide equally
                   {
                       break;
                   }
@@ -204,9 +223,9 @@ vector<string> decidePieces(vector<string> av, int c, int len)
 
 }
 
-void download( char* cliAdd, string bitmap )
+void download( char* cliAdd, string bitmap, string dest )
 {
-  cout<<"bitmap: "<<bitmap<<endl;
+  //cout<<"bitmap: "<<bitmap<<endl;
   string ip( cliAdd );
   int colon = ip.find(':');
   ip.erase( colon, strlen(cliAdd) - colon );
@@ -241,7 +260,7 @@ void download( char* cliAdd, string bitmap )
 
   int j;
 
-  cout<<"about to req piece "<<endl;
+  //cout<<"about to req piece "<<endl;
   if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
   {
       printf("\nConnection Failed \n");
@@ -249,14 +268,14 @@ void download( char* cliAdd, string bitmap )
   }
 
   string req = "givePieces " + SHAofSHA + " " + &bitmap[0];
-  cout<<req<<endl;
+  //cout<<req<<endl;
 
   char buffer[1024] = {0};
 
   send(sock , &req[0] , strlen(&req[0]) , 0 );
-  printf("Pieces req Sent\n");
+  //printf("Pieces req Sent\n");
   valread = read( sock , buffer, 1024);
-  printf("%s\n",buffer );
+  //printf("%s\n",buffer );
   memset(&buffer,'\0',1024);
 
   int size;
@@ -264,11 +283,11 @@ void download( char* cliAdd, string bitmap )
 
 
   int pos;
-  cout<<"bitmap len: "<<strlen( &bitmap[0] );
+  //cout<<"bitmap len: "<<strlen( &bitmap[0] );
   //ofstream df("down.txt", ios::binary );
   //df.close();
   FILE *downFile ;
-  downFile = fopen("d.txt", "wb");
+  downFile = fopen(&dest[0] , "wb");
 char sendAny[] = "keepSending";
 
   for(int i=0; i<strlen( &bitmap[0] ); i++)
@@ -278,7 +297,7 @@ char sendAny[] = "keepSending";
         if( i == strlen( &bitmap[0] )-1 )
         {
             pos = i*524288;
-            cout<<"pos: "<<pos;
+            //cout<<"pos: "<<pos;
             //downFile.seekp( pos );
             fseek( downFile, pos, SEEK_SET );
             j=0;
@@ -295,12 +314,13 @@ char sendAny[] = "keepSending";
                 j++;
                 //size--;
             }
-            cout<<"i: "<<i<<endl;
+            hashPieces[SHAofSHA][i] = '1';
+            //cout<<"i: "<<i<<endl;
             break;
         }
 
         pos = i*524288;
-        cout<<"pos: "<<pos;
+        //cout<<"pos: "<<pos;
         //downFile.seekp( pos );
         fseek( downFile, pos, SEEK_SET );
         j=0;
@@ -316,12 +336,25 @@ char sendAny[] = "keepSending";
             j++;
             //size--;
         }
-        cout<<"i: "<<i<<endl;
+        hashPieces[SHAofSHA][i] = '1';
+
+        if( i == 0 )
+        {
+            Remove[SHAofSHA] = false ;
+            if( firstShare )
+            {
+                firstShare = false;
+                thread t( seed, listenPort, SHAofSHA );
+                t.detach();
+            }
+        }
+
+        //cout<<"i: "<<i<<endl;
 
     }
 
   }
-  cout<<"SIZE: "<<hashPath[ SHAofSHA ]<<" "<<size<<endl;
+  //cout<<"SIZE: "<<hashPath[ SHAofSHA ]<<" "<<size<<endl;
   fclose(downFile);
   return;
 }

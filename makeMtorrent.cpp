@@ -22,13 +22,16 @@ size_t getFilesize(const char* filename) {
     return st.st_size;
 }
 
-/*void SHA1_bin_to_str(const unsigned char * const hashbin, char * const hashstr)
+bool fileExists( const char* filepath )
 {
-  for(int i = 0; i<20; ++i)
-    sprintf(&hashstr[i*2], "%02X", hashbin[i]);
+    struct stat buf;
+    if (stat(filepath, &buf) != -1)
+    {
+        return true;
+    }
+    return false;
+}
 
-  hashstr[40]=0;
-}*/
 string get_hash( char* path )
 {
   string fileHash = "";

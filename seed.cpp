@@ -20,10 +20,8 @@ extern map < string, bool > Remove;
 
 void upload( char*, char*, int);
 
-void handleReq( int new_socket, char* buffer )
+void handleReq( int new_socket, char* buffer, string sha )
 {
-  int valread = read( new_socket , buffer, 1024);
-  printf("Requester: %s\n",buffer );
 
   char reply[1024];
   if( buffer!=NULL )
@@ -42,30 +40,30 @@ void handleReq( int new_socket, char* buffer )
     if( strcmp(tokens[0], "givePieces") == 0 )
     {
         strcpy(reply,"give hmm");
-        cout<<"received piece req"<<endl;
+        //cout<<"received piece req"<<endl;
         send(new_socket , reply , strlen(reply) , 0 );
-        cout<<"giving piece"<<endl;
+        //cout<<"giving piece"<<endl;
 
-        cout<<"Tokens[0] = "<<tokens[0]<<endl;
-        cout<<"Tokens[1] = "<<tokens[1]<<endl;
+        //cout<<"Tokens[0] = "<<tokens[0]<<endl;
+        //cout<<"Tokens[1] = "<<tokens[1]<<endl;
         if( tokens[1]!=NULL && tokens[2]!=NULL )
         {
             string s(tokens[1]);   //SHA
             string p(tokens[2]);   //piece number to be read
-            cout<<"s: "<<s<<endl;
+            //cout<<"s: "<<s<<endl;
             string path = hashPath[s];
-            cout<<"Path : "<<path<<endl;
+            //cout<<"Path : "<<path<<endl;
             char* cpath = &path[0];
-            cout<<"read from: "<<cpath<<endl;
+            //cout<<"read from: "<<cpath<<endl;
 
             upload( cpath, tokens[2], new_socket );
         }
     }
 
     //{}  //sendPiece
-    else
+    else if( strcmp(tokens[0], "bitMapFor?") == 0  &&  tokens[1]!=NULL )
     {
-      string SHA(buffer);
+      string SHA(tokens[1]);
       SHA = SHA.substr(0,20);
       strcpy( reply, &hashPieces[SHA][0] );
       //cout<<hashPieces[SHA]<<endl;
@@ -75,7 +73,7 @@ void handleReq( int new_socket, char* buffer )
   }
 
 
-  printf("Pieces/Bitmap sent\n");
+  //printf("Pieces/Bitmap sent\n");
 
   return;
 }
@@ -86,7 +84,7 @@ void seed(int listenPort, string SHA)
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
-    char buffer[1024] = {0};
+    char buffer[2048] = {0};
     //char *hello = "I have this this pieces";
 
     // Creating socket file descriptor
@@ -120,20 +118,30 @@ void seed(int listenPort, string SHA)
     }
 
     int j;
-    while( Remove[SHA] == false )
+    while( 1 )
     {
         //if(remove) return;
-        cout<<"accepting.."<<endl;
+        //cout<<"accepting.."<<endl;
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
         {
             perror("Connection accept error");
         }
 
-        thread t( handleReq, new_socket, buffer );
-
-        t.detach();
+        int valread = read( new_socket , buffer, 2048);
+        if( buffer != NULL )
+        {
+            string requestedSHA(buffer);
+            requestedSHA.erase( 0,11 );
+            requestedSHA = requestedSHA.substr(0,20);
+            if( Remove.find(requestedSHA) != Remove.end()  &&  Remove[ requestedSHA ] == false )  //we are still seeding that file
+            {
+                thread t( handleReq, new_socket, buffer, SHA );
+                t.detach();
+            }
+        }
 
     }
+    return;
 }
 
 void upload( char* cpath, char* pieces, int new_socket )
@@ -143,11 +151,11 @@ void upload( char* cpath, char* pieces, int new_socket )
   upFile =  fopen( cpath, "rb" );
   //upFile.seekg( i*524288 , ios::beg);
   int pos;
-  cout<<"inside upload func"<<endl;
+  //cout<<"inside upload func"<<endl;
   char buffer[1024];
   int valread;
-  cout<<"Requested pieces: "<<pieces;
-  cout<<"no of pieces: "<<strlen(pieces)<<endl;
+  //cout<<"Requested pieces: "<<pieces;
+  //cout<<"no of pieces: "<<strlen(pieces)<<endl;
   for( int i=0; i<strlen(pieces); i++ )
   {
       if( pieces[i] == '1' )
@@ -180,7 +188,7 @@ void upload( char* cpath, char* pieces, int new_socket )
 
                     j++;
                 }
-                cout<<"mod: "<<size%512;
+                //cout<<"mod: "<<size%512;
                 break;
           }
           pos = i*524288;
