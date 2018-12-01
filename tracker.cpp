@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <fstream>
 #include <thread>
+#include <mutex>
 
 #define bufSize 1024
 
@@ -27,9 +28,15 @@ char OTHER_TRACKER_PORT[20];
 
 void handleRequest( struct sockaddr_in, char*, unsigned int, int );
 
-string REPLY;
-char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
+//string REPLY;
+
+mutex file_lock;
+mutex map_lock;
+
+string processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
 {
+  string REPLY;
+
   char buffer[bufSize];
   strcpy(buffer,buf);
   char *token;
@@ -53,15 +60,22 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
       //string cliListenPort(tokens[3]);
       //client = client + ":" + cliListenPort;
 
+      map_lock.lock();
+
       if( seedersHash.find(SHA) == seedersHash.end() ) //SHA string not already present
       {
         s.insert(client);
         seedersHash[SHA] = s;
+
+        file_lock.lock();
+
         ofstream log ( seeder_list, ios::ate | ios::app);
         log << tokens[1] <<endl;
         log << SHA <<endl;
         log << client <<endl;
         log.close();
+
+        file_lock.unlock();
       }
       else   // SHA string already present
       {
@@ -70,6 +84,9 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
           seedersHash[SHA].insert(client);
           vector<string> file;
           string line,logCli;
+
+          file_lock.lock();
+
           ifstream log(seeder_list);
           while ( getline (log,line) )
           {
@@ -99,8 +116,13 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
             for(int i=0; i<file.size(); i++)
                 log1 << file[i] <<endl;
             log1.close();
+
+            file_lock.unlock();
           }
         }
+
+        map_lock.unlock();
+
         REPLY = "Shared";
 
         if( !fromTracker )
@@ -119,14 +141,14 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
           sendto(sockfd, (const char *)toOtherTracker, strlen(toOtherTracker), MSG_CONFIRM, (const struct sockaddr *) &otherServAdd, sizeof(otherServAdd));
         }
 
-        buf = &REPLY[0];
-        return buf;
+        return REPLY;
       }
 
       else if( strcmp(tokens[0],"seederlist") == 0 )  //receive hash
     	{
           string SHA(tokens[1]);
           REPLY="";
+          map_lock.lock();
           if( seedersHash.find(SHA) == seedersHash.end() ) //SHA string not present
           {
             REPLY = "NONE";
@@ -136,8 +158,8 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
             for( auto i = seedersHash[SHA].begin(); i != seedersHash[SHA].end() ; i++ )
               REPLY = *i + " " + REPLY;
           }
-          buf = &REPLY[0];
-          return buf;
+          map_lock.unlock();
+          return REPLY;
       }
 
       else if( strcmp(tokens[0],"remove") == 0 && tokens[1]!=NULL && tokens[2]!=NULL )
@@ -147,12 +169,16 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
         string client(tokens[2]);
         //string cliListenPort(tokens[2]);
         //client = client + ":" + cliListenPort;
+        map_lock.lock();
 
         if( seedersHash[SHA].find(client) != seedersHash[SHA].end() )  //client not already present
         {
             seedersHash[SHA].erase(client);
             vector<string> file;
             string line,logCli;
+
+            file_lock.lock();
+
             ifstream log(seeder_list);
             while ( getline (log,line) )
             {
@@ -192,7 +218,10 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
               for(int i=0; i<file.size(); i++)
                   log1 << file[i] <<endl;
               log1.close();
+
+              file_lock.unlock();
           }
+          map_lock.unlock();
           REPLY = "Removed";
 
           if( !fromTracker )
@@ -210,19 +239,95 @@ char* processRequest(char* buf, char* addr, int sockfd, bool fromTracker)
 
             sendto(sockfd, (const char *)toOtherTracker, strlen(toOtherTracker), MSG_CONFIRM, (const struct sockaddr *) &otherServAdd, sizeof(otherServAdd));
           }
-          buf = &REPLY[0];
-          return buf;
+          return REPLY;
         }
 
         else if( strcmp(tokens[0],"alive?") == 0 )  //by other tracker
       	{
             REPLY="alive";
 
-            buf = &REPLY[0];
-            return buf;
+            return REPLY;
+        }
+
+        else if( strcmp(tokens[0],"give_seederlist_file") == 0 )
+        {
+            ifstream file(seeder_list);
+            if (file.is_open())
+            {
+              string str((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+              REPLY = str;
+            }
+            else
+            {
+              REPLY = "EMPTY";
+            }
+            return REPLY;
         }
     }
-  return buf;
+  return REPLY;
+}
+
+void restore_seederlist(int sockfd)
+{
+    bool tracker_alive = false;
+    char buffer [1024];
+
+    struct sockaddr_in otherServAdd;
+    memset(&otherServAdd, 0, sizeof(otherServAdd));
+
+    otherServAdd.sin_family = AF_INET;  // internet address
+    otherServAdd.sin_port = htons( atoi(OTHER_TRACKER_PORT) );
+    otherServAdd.sin_addr.s_addr = inet_addr(OTHER_TRACKER_IP);
+
+    char reqTracker[] = "alive?";
+    unsigned int len;
+
+    struct timeval tv;
+
+    sendto(sockfd, (const char*)reqTracker, strlen(reqTracker), MSG_CONFIRM, (const struct sockaddr*)&otherServAdd, sizeof(otherServAdd));
+
+    tv.tv_sec = 0;
+    tv.tv_usec = 800000;  //0.8 seconds
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0)
+    {
+        perror("setsockopt Error");
+    }
+
+    recvfrom(sockfd, (char *)buffer, bufSize, MSG_WAITALL, (struct sockaddr *) &otherServAdd, &len);
+    if( strcmp(buffer,"alive") == 0 )
+    {
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0)
+        {
+            perror("setsockopt Error");
+        }
+        tracker_alive = true;
+    }
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0)
+    {
+        perror("setsockopt Error");
+    }
+
+    if (tracker_alive)
+    {
+      buffer[0] = '\0';
+      char reqFile[] = "give_seederlist_file";
+      sendto(sockfd, (const char*)reqFile, strlen(reqFile), MSG_CONFIRM, (const struct sockaddr*)&otherServAdd, sizeof(otherServAdd));
+      recvfrom(sockfd, (char *)buffer, bufSize, MSG_WAITALL, (struct sockaddr *) &otherServAdd, &len);
+      if (strcmp(buffer, "EMPTY") != 0 && buffer != NULL)
+      {
+        ofstream file(seeder_list, ios::trunc | ios::out);
+        string data(buffer);
+        file << data;
+        file.close();
+      }
+    }
+
+    cout<<"is other tracker alive?: "<<tracker_alive<<endl;
+    return;
 }
 
 int main( int argc, char** argv )
@@ -312,6 +417,10 @@ int main( int argc, char** argv )
         exit(EXIT_FAILURE);
     }
 
+    thread restore_seederlist_thread( restore_seederlist, sockfd );
+    restore_seederlist_thread.detach();
+    sleep(1);
+
     int n,pid;
     unsigned int len;
     while(1)
@@ -345,10 +454,11 @@ void handleRequest( struct sockaddr_in cliAdd, char* buf, unsigned int len, int 
   //int CliPort = ntohs(cliAdd.sin_port);  //give the tracker port that the client will listen on
   //string clientSocket = CliIP + ":" + to_string(CliPort);
   //cout<<"Client Address: "<<CliIP<<endl;
-  printf("Client : %s\n", buffer);
+  printf("%s: %s\n", &CliIP[0], buffer);
 
   char reply[1024];
-  strcpy( reply , processRequest( buffer, &CliIP[0], sockfd, fromTracker ) );
+  string REPLY = processRequest( buffer, &CliIP[0], sockfd, fromTracker );
+  strcpy( reply ,  &REPLY[0]);
   //cout<<buffer<<endl;
 
   //cout<< "bool    "<<fromTracker;

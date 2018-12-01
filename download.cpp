@@ -36,7 +36,7 @@ void download( char*, string, string );
 
 string SHAofSHA;
 
-void pollPieces( char* clientList, char* SHA )
+void pollPieces( char* clientList, char* SHA, string mySock )
 {
   string temp(SHA);
   SHAofSHA = temp;
@@ -44,14 +44,27 @@ void pollPieces( char* clientList, char* SHA )
   char* token;
   token = strtok (clientList," ");
   vector<char*> clients;
-  clients.push_back(token);
+  
+  if ( token != NULL && strcmp (token, &mySock[0]) != 0)
+    clients.push_back( token );
+
   while (token != NULL)
   {
+    cout << clients.size() << endl;
     //cout<<tokens[i++];
     token = strtok(NULL," ");
-    clients.push_back( token );
+
+    if ( token != NULL && strcmp (token, &mySock[0]) != 0)
+      clients.push_back( token );
+
   }
   int no_of_clients = clients.size();
+
+  if (no_of_clients == 0)
+  {
+    cout << "Cannot download from own socket" << endl;
+    return;
+  }
 
   struct sockaddr_in address;
   int sock = 0, valread;

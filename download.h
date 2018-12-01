@@ -1,2 +1,2 @@
 using namespace std;
-void pollPieces( char* , char* );
+void pollPieces( char* , char*, string );

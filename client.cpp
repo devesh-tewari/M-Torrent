@@ -87,12 +87,12 @@ string processCommand( string s )
 	{
       if( tokens[2] == NULL )
       {
-          cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+          cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
           return "DummyCommand";
       }
       if( fileExists( (const char*)tokens[1]) == false )
       {
-          cout<<"FAILURE:FILE_NOT_FOUND"<<endl;
+          cout<<"\033[1;31mFAILURE:FILE_NOT_FOUND\033[0m"<<endl;
           return "DummyCommand";
       }
       string localFilePath(tokens[1]);
@@ -109,7 +109,7 @@ string processCommand( string s )
       string MtorName(tokens[2]);
       if(MtorName.substr(MtorName.find_last_of(".") + 1) != "mtorrent")  //delete the mtorrent file
       {
-          cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+          cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
           return "DummyCommand";
       }
 
@@ -141,7 +141,7 @@ string processCommand( string s )
       map_file << bitmap << endl; //bitmap
       map_file.close();
 
-      cout<<"SUCCESS:"<<filename<<".mtorrent"<<endl;
+      cout<<"\033[1;32mSUCCESS:"<<filename<<".mtorrent\033[0m"<<endl;
 
       shareCommand = true;
 
@@ -155,23 +155,23 @@ string processCommand( string s )
 
     if( tokens[2] == NULL || tokens[1] == NULL )
     {
-        cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+        cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
         return "DummyCommand";
     }
     string MtorName(tokens[1]);
     if(MtorName.substr(MtorName.find_last_of(".") + 1) != "mtorrent")  //delete the mtorrent file
     {
-        cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+        cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
         return "DummyCommand";
     }
     if( fileExists( (const char*)tokens[1]) == false )
     {
-        cout<<"FAILURE:MTORRENT_FILE_NOT_FOUND"<<endl;
+        cout<<"\033[1;31mFAILURE:MTORRENT_FILE_NOT_FOUND\033[0m"<<endl;
         return "DummyCommand";
     }
     if( fileExists( (const char*)tokens[2]) == true )
     {
-        cout<<"FAILURE:ALREADY_EXISTS"<<endl;
+        cout<<"\033[1;31mFAILURE:ALREADY_EXISTS\033[0m"<<endl;
         return "DummyCommand";
     }
     string tem(tokens[2]);
@@ -194,7 +194,7 @@ string processCommand( string s )
     hashPath[SHA] = tem;
 
     getCommand = true;
-    cout<<"SUCCESS:FILE_PATH_IN_CURRENT_CLIENT"<<endl;
+    cout<<"\033[1;32mSUCCESS:FILE_PATH_IN_CURRENT_CLIENT\033[0m"<<endl;
 
     return commandName + " " + SHA;
 
@@ -204,19 +204,19 @@ string processCommand( string s )
 	{
     if( tokens[1] == NULL )
     {
-        cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+        cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
         return "DummyCommand";
     }
     string MtorName(tokens[1]);
     if(MtorName.substr(MtorName.find_last_of(".") + 1) != "mtorrent")  //delete the mtorrent file
     {
-        cout<<"FAILURE:INVALID_ARGUMENTS"<<endl;
+        cout<<"\033[1;31mFAILURE:INVALID_ARGUMENTS\033[0m"<<endl;
         return "DummyCommand";
     }
 
     if( fileExists( (const char*)tokens[1]) == false )
     {
-        cout<<"FAILURE:FILE_NOT_FOUND"<<endl;
+        cout<<"\033[1;31mFAILURE:FILE_NOT_FOUND\033[0m"<<endl;
         return "DummyCommand";
     }
 
@@ -239,7 +239,7 @@ string processCommand( string s )
     if(mtorr.substr(mtorr.find_last_of(".") + 1) == "mtorrent")  //delete the mtorrent file
       remove(tokens[1]);
 
-    cout<<"SUCCESS:FILE_REMOVED"<<endl;
+    cout<<"\033[1;32mSUCCESS:FILE_REMOVED\033[0m"<<endl;
 
     return commandName + " " + SHA + " " + mySock;
 
@@ -252,7 +252,7 @@ void showDownloads()
 {
     if( downloads.empty() )
     {
-        cout<<"No current downloads"<<endl;
+        cout<<"\033[1;31mNo current downloads\033[0m"<<endl;
     }
     for( auto i = downloads.begin(); i != downloads.end(); i++ )
       cout<< i->second <<endl;
@@ -301,7 +301,7 @@ void checkAlive(int sockfd)
         perror("setsockopt Error");
     }
 
-    cout<<"Tend"<<tracker_alive<<endl;
+    cout<<"is T1 alive?: "<<tracker_alive<<endl;
     return;
 }
 
@@ -417,17 +417,20 @@ int main( int argc, char** argv )
         command = processCommand(command);
 
         sendto(sockfd, (const char *)&command[0], strlen(&command[0]), MSG_CONFIRM, (const struct sockaddr *) &servAdd, sizeof(servAdd));
-        //printf("Command sent.\n");
+        printf("Command sent.\n");
 
         n = recvfrom(sockfd, (char *)buffer, bufSize, MSG_WAITALL, (struct sockaddr *) &servAdd, &len);
         buffer[n] = '\0';
-        //printf("Server : %s\n", buffer);
+        printf("Server : %s\n", buffer);
 
         if ( getCommand )
         {
           if( strcmp(buffer, "NONE" ) == 0 )  //if there are no seeders available
+          {
+            cout << "No Seeders available" << endl;
             continue;
-          thread t( pollPieces, buffer, &SHA[0] );  //this will poll pieces for each client and download the file
+          }
+          thread t( pollPieces, buffer, &SHA[0], mySock );  //this will poll pieces for each client and download the file
           t.detach();
         }
 
@@ -447,7 +450,7 @@ int main( int argc, char** argv )
         unsigned int len;
         if( i->second == false )
         {
-            string command = rem + " " + i->first + " " + to_string(listenPort);
+            string command = rem + " " + i->first + " " + myIP + ":" + to_string(listenPort);
             sendto(sockfd, (const char *)&command[0], strlen(&command[0]), MSG_CONFIRM, (const struct sockaddr *) &servAdd, sizeof(servAdd));
             //printf("Command sent.\n");
 
