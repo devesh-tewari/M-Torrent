@@ -44,7 +44,7 @@ void pollPieces( char* clientList, char* SHA, string mySock )
   char* token;
   token = strtok (clientList," ");
   vector<char*> clients;
-  
+
   if ( token != NULL && strcmp (token, &mySock[0]) != 0)
     clients.push_back( token );
 
@@ -316,7 +316,6 @@ char sendAny[] = "keepSending";
             j=0;
             while( j<= (size/1024)%512 )//&& size > 0 )
             {
-
                 //send(sock , sendAny , strlen(sendAny) , 0 );
                 //printf("piece received\n");
                 valread = recv( sock , buffer, 1024, 0);
